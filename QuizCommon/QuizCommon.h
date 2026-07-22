@@ -2,121 +2,131 @@
 #define QUIZ_COMMON_H
 
 #include <Arduino.h>
-#include "Zigbee.h"
-#include "esp_zigbee_core.h"
+#include <WiFi.h>
+#include <ESPmDNS.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
+#include <esp_now.h>
 
-#include "config.h"
+#include "./config.h"
 
-
+// --- Game States ---
 enum GameState { IDLE, GAME_ARMED, GAME_WON, TEST_MODE };
 GameState currentState = IDLE;
 
 enum HostState { HOST_IDLE, HOST_GAME, HOST_TEST };
 HostState hostState = HOST_IDLE;
 
+// --- Colors ---
+struct RGB { uint8_t r, g, b; };
+constexpr RGB COLOR_OFF       = {0, 0, 0};
+constexpr RGB COLOR_BOOTING   = {0, 36, 36};
+constexpr RGB COLOR_ERROR     = {102, 0, 0};
+constexpr RGB COLOR_TEST_MODE = {102, 102, 0};
 
-struct RGB {
-    uint8_t r, g, b;
-};
-
-constexpr RGB COLOR_OFF   = {0, 0, 0};
-
-constexpr RGB COLOR_BOOTING    = {0, 36, 36};
-constexpr RGB COLOR_ERROR      = {102, 0, 0};
-constexpr RGB COLOR_PAIRING    = {102, 0, 102};
-constexpr RGB COLOR_RESETTING  = {76, 0, 54};
-constexpr RGB COLOR_TEST_MODE  = {102, 102, 0};
-
-
-// --- Set RGB led color ---
 inline void setRGBLedColor(RGB color) {
   rgbLedWrite(RGB_BUILTIN, color.r, color.g, color.b);
 }
 
+const uint8_t macBroadcast[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-// --- Shared Zigbee Command Helper ---
-inline void sendQuizCommand(uint16_t dst_addr, uint8_t dst_ep, uint8_t src_ep, uint8_t cmd_id) {
-  esp_zb_zcl_on_off_cmd_t req;
-  memset(&req, 0, sizeof(req));
-  req.zcl_basic_cmd.dst_addr_u.addr_short = dst_addr;
-  req.zcl_basic_cmd.dst_endpoint = dst_ep;
-  req.zcl_basic_cmd.src_endpoint = src_ep;
-  req.address_mode = ESP_ZB_APS_ADDR_MODE_16_ENDP_PRESENT;
-  req.on_off_cmd_id = cmd_id;
+// --- ESP-NOW Protocol Structures ---
+enum QuizCommand { CMD_IDLE, CMD_ARM, CMD_BUZZ, CMD_TEST_ENTER, CMD_ENABLE_OTA };
 
-  esp_zb_lock_acquire(portMAX_DELAY);
-  esp_zb_zcl_on_off_cmd_req(&req);
-  esp_zb_lock_release();
-}
+typedef struct QuizMessage {
+  uint8_t senderType; // 0 = Coordinator, 1 = Host, 2 = Contestant
+  uint8_t senderId;   // Contestant 1-4 (Ignored for Host/Coord)
+  QuizCommand command;
+} QuizMessage;
 
-
-// --- Reset Zigbee credentials and storage (for End Devices: Hold BOOT for 3s) ---
-inline void factoryResetZigbee() {
-  setRGBLedColor(COLOR_RESETTING);
-  Serial.println("\n[RESET] Erasing Zigbee credentials and storage...");
-  Zigbee.factoryReset(true); // Clears stack storage and reboots
-  Serial.println("[RESET] Erase complete. Rebooting board...");
-  delay(1000);
-  ESP.restart();
-}
-
-
-// --- Connect to Zigbee Network (for End Devices) ---
-inline void connectZigbeeED() {
-  Serial.println("Starting Zigbee End Device...");
-  if (!Zigbee.begin(ZIGBEE_END_DEVICE)) {
-    Serial.println("Zigbee failed to start!");
-    setRGBLedColor(COLOR_ERROR);
-    delay(2000);
-    factoryResetZigbee();
-    while(1);
+// --- ESP-NOW Helper ---
+inline void registerPeer(const uint8_t *mac_addr) {
+  esp_now_peer_info_t peerInfo = {};
+  memcpy(peerInfo.peer_addr, mac_addr, 6);
+  peerInfo.channel = 0;
+  peerInfo.encrypt = false;
+  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+    Serial.println("Failed to add peer!");
   }
-  Serial.println("Searching for Coordinator...");
+}
+
+// ==========================================
+// --- Power Save & On-Demand OTA Logic ---
+// ==========================================
+bool otaEnabled = false;
+
+// Call this once in setup() to configure ESP-NOW without connecting to a router
+inline void initBaseRadios() {
+  btStop(); // Disable Bluetooth to save battery
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect(); // Ensure we aren't burning power trying to connect to an AP
+}
+
+// Call this dynamically when the boot button or ESP-NOW command is received
+inline void startWiFiAndOTA(const char* hostname) {
+  if (otaEnabled) return; // Prevent triggering multiple times
   
-  // Wait here until we successfully join the mesh
-  while (!Zigbee.connected()) {
-    Serial.print(".");
+  Serial.println("\n[System] Waking up Wi-Fi and initializing OTA...");
+  
+  WiFi.setHostname(hostname);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  Serial.printf("[Wi-Fi] Connecting to %s", WIFI_SSID);
+  
+  // Non-blocking wait for Wi-Fi (10 second connection timeout)
+  unsigned long startAttempt = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 10000) {
     delay(500);
+    Serial.print(".");
   }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\n[Wi-Fi] Connected!");
+    Serial.printf("[Wi-Fi] IP Address: %s\n", WiFi.localIP().toString().c_str());
+  } else {
+    Serial.println("\n[Wi-Fi] Connection timed out.");
+    return;
+  }
+
+  // --- Configure ArduinoOTA ---
+  ArduinoOTA.setHostname(hostname);
+  ArduinoOTA.setPassword(OTA_PASSWORD);
+
+  ArduinoOTA.onStart([]() { Serial.println("[OTA] Start updating..."); });
+  ArduinoOTA.onEnd([]() { Serial.println("\n[OTA] Update Complete! Rebooting..."); });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("[OTA] Progress: %u%%\n", (progress / (total / 100)));
+  });
   
-  Serial.println("\nSuccessfully joined the network!");
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("[OTA] Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+    else if (error == OTA_END_ERROR) Serial.println("End Failed");
+  });
+  
+  ArduinoOTA.begin();
+  otaEnabled = true;
+  Serial.println("[OTA] Service initialized and waiting for uploads.");
 }
 
-
-// --- Universal Factory Reset Helper (For End Devices: Hold BOOT for 3s) ---
-inline void checkFactoryResetButton() {
-  if (digitalRead(PIN_BOOT) == LOW) {
-    unsigned long startTime = millis();
-    while (digitalRead(PIN_BOOT) == LOW) {
-      if (millis() - startTime >= 3000) {
-        factoryResetZigbee();
-      }
-      delay(50);
-    }
+// Helper to keep OTA handling concise in loop()
+inline void handleOTA() {
+  if (otaEnabled) {
+    ArduinoOTA.handle();
   }
 }
 
-
-// --- Coordinator Button Helper (Short press = Open Network, Long press = Reset) ---
-inline void handleCoordinatorButton() {
-  if (digitalRead(PIN_BOOT) == LOW) {
-    unsigned long startTime = millis();
-    while (digitalRead(PIN_BOOT) == LOW) {
-      delay(50);
-    }
-    unsigned long duration = millis() - startTime;
-
-    if (duration >= 3000) {
-      // Long Press -> Factory Reset
-      factoryResetZigbee();
-    } else if (duration >= 50) {
-      // Short Press -> Open Zigbee Network for joining (180 seconds)
-      Serial.println("\n[ZIGBEE] Short press: Opening network for pairing (180s)...");
-      setRGBLedColor(COLOR_PAIRING);
-      Zigbee.openNetwork(180);
-      #if USE_BUZZER
-      tone(PIN_COORDINATOR_BUZZER, 2500, 100); // Quick confirmation chirp
-      #endif
+// Helper to check the physical BOOT pin for local override
+inline void checkBootButtonForOTA(const char* hostname) {
+  if (!otaEnabled && digitalRead(PIN_BOOT) == LOW) {
+    delay(50); // Debounce
+    if (digitalRead(PIN_BOOT) == LOW) {
+      startWiFiAndOTA(hostname);
+      // Wait for button release so it doesn't spam
+      while(digitalRead(PIN_BOOT) == LOW) delay(10);
     }
   }
 }
