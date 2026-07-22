@@ -1,0 +1,12 @@
+#define PIN_COORDINATOR_RED    2
+#define PIN_COORDINATOR_YEL    3
+#define PIN_COORDINATOR_GRN    14
+#define PIN_COORDINATOR_BLU    23
+#define PIN_COORDINATOR_BUZZER 22
+
+#define PIN_BUTTON    12
+#define PIN_BUTTON_LED 2
+
+#define PIN_BOOT 9
+
+#define USE_BUZZER 1
