@@ -22,6 +22,7 @@ struct RGB { uint8_t r, g, b; };
 constexpr RGB COLOR_OFF       = {0, 0, 0};
 constexpr RGB COLOR_BOOTING   = {0, 36, 36};
 constexpr RGB COLOR_ERROR     = {102, 0, 0};
+constexpr RGB COLOR_OTA       = {102, 0, 102};
 constexpr RGB COLOR_TEST_MODE = {102, 102, 0};
 
 inline void setRGBLedColor(RGB color) {
@@ -65,6 +66,8 @@ inline void initBaseRadios() {
 // Call this dynamically when the boot button or ESP-NOW command is received
 inline void startWiFiAndOTA(const char* hostname) {
   if (otaEnabled) return; // Prevent triggering multiple times
+
+  setRGBLedColor(COLOR_OTA);
   
   Serial.println("\n[System] Waking up Wi-Fi and initializing OTA...");
   
