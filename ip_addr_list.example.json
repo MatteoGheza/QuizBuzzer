@@ -1,0 +1,8 @@
+{
+    "Quiz-Button-1": "qb_button",
+    "Quiz-Button-2": "qb_button",
+    "Quiz-Button-3": "qb_button",
+    "Quiz-Button-4": "qb_button",
+    "Quiz-Coordinator": "qb_coordinator",
+    "Quiz-Host-Controller": "qb_host_controller"
+}

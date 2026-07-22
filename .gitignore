@@ -1,2 +1,5 @@
 QuizCommon/config.h
+ip_addr_list*
+!ip_addr_list.example.json
 **/build
+__pycache__/**
