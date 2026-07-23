@@ -74,7 +74,7 @@ void loop() {
   }
   // If button is currently being held down, check if it's been held for 6 seconds
   else if (currentStateBtn == LOW && lastState == LOW) {
-    if (!otaEnabled && (millis() - pressStart >= 6000)) {
+    if (millis() - pressStart >= 6000) {
       Serial.println("Host: 6-Second Hold Detected! Triggering Global OTA...");
       QuizMessage outMsg = {1, 0, CMD_ENABLE_OTA};
       esp_now_send(macCoordinator, (uint8_t *) &outMsg, sizeof(outMsg));
@@ -84,8 +84,10 @@ void loop() {
         digitalWrite(PIN_BUTTON_LED, HIGH); delay(150); 
       }
       
-      // Now it is safe to reset the radio and connect to Wi-Fi
-      startWiFiAndOTA("Quiz-Host-Controller");
+      if (!otaEnabled) {
+        // Now it is safe to reset the radio and connect to Wi-Fi
+        startWiFiAndOTA("Quiz-Host-Controller");
+      }
       
       // Wait for user to release the button
       while(digitalRead(PIN_BUTTON) == LOW) delay(10);
