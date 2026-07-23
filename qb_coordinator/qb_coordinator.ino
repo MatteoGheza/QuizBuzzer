@@ -1,10 +1,13 @@
 #include <..\QuizCommon\QuizCommon.h>
 
 bool pendingOTA = false; // Flag to safely trigger Wi-Fi in the main loop
+bool pendingSummary = false; // Flag to defer summary transmission to bridge
+unsigned long roundFinishTime = 0; // Tracks when the game was won
 
 unsigned long gameStartTime = 0;
-
 bool contestantsWithPenalty[4] = {false, false, false, false};
+float contestantTimes[4] = {0, 0, 0, 0}; // Store response times
+uint8_t lastWinner = 0;
 
 void clearCentralLeds() {
   digitalWrite(PIN_COORDINATOR_RED, LOW);
@@ -20,24 +23,31 @@ void handleContestantPress(uint8_t contestantId, uint8_t pin) {
     if (currentState != IDLE) {
       unsigned long endTime = micros();
       float durationMs = (endTime - gameStartTime) / 1000.0f;
+      contestantTimes[contestantId-1] = durationMs; // Save time
       Serial.printf("GAME: Contestant %d responded in %.4f ms.\n", contestantId, durationMs);
     }
+    
     if (currentState == GAME_ARMED) {
       currentState = GAME_WON; 
+      lastWinner = contestantId; // Save winner
       
       digitalWrite(pin, HIGH);
       #if USE_BUZZER
       tone(PIN_COORDINATOR_BUZZER, 2000, 400); 
       #endif
 
-      // Broadcast IDLE command to instantly turn off all contestant LEDs
+      // Broadcast IDLE command instantly to shut off losing buzzers
       QuizMessage outMsg = {0, 0, CMD_IDLE};
       esp_now_send(macBroadcast, (uint8_t *) &outMsg, sizeof(outMsg));
 
       Serial.printf("GAME: Winner is Contestant %d!\n", contestantId);
-
+      
+      // Trigger the deferment flag so the summary sends AFTER the immediate events
+      pendingSummary = true; 
+      roundFinishTime = millis(); // Record the exact moment the round ended
     }
   }
+  
   if (currentState == TEST_MODE) {
     digitalWrite(pin, HIGH);
     
@@ -67,7 +77,14 @@ void OnDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int 
 
       QuizMessage outMsg = {0, 0, CMD_ARM};
       esp_now_send(macBroadcast, (uint8_t *) &outMsg, sizeof(outMsg));
+      
       gameStartTime = micros();
+      pendingSummary = false; // Cancel any pending summaries if re-armed quickly
+      
+      // Reset times for the new round
+      for(int i = 0; i < 4; i++) contestantTimes[i] = 0.0f;
+      lastWinner = 0;
+      
       Serial.println("MODE: Game Armed - Waiting for buzzers...");
     } 
     else if (msg.command == CMD_IDLE) {
@@ -78,10 +95,8 @@ void OnDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int 
       esp_now_send(macBroadcast, (uint8_t *) &outMsg, sizeof(outMsg));
       Serial.println("MODE: Reset to IDLE");
 
-      contestantsWithPenalty[0] = false;
-      contestantsWithPenalty[1] = false;
-      contestantsWithPenalty[2] = false;
-      contestantsWithPenalty[3] = false;
+      pendingSummary = false; // Cancel pending summary on manual IDLE
+      for(int i = 0; i < 4; i++) contestantsWithPenalty[i] = false;
     } 
     else if (msg.command == CMD_TEST_ENTER) {
       currentState = TEST_MODE;
@@ -142,18 +157,38 @@ void setup() {
   }
 
   esp_now_register_recv_cb(OnDataRecv);
-  registerPeer(macBroadcast); 
+  registerPeer(macBroadcast);
+  registerPeer(macBridge);
 
   Serial.println("Coordinator Ready.");
   setRGBLedColor(COLOR_OFF);
 }
 
 void loop() {
-  // Process deferred OTA startup safely outside the ESP-NOW callback
   if (pendingOTA) {
     pendingOTA = false;
-    delay(100); // Give the ESP-NOW broadcast a tiny bit of time to physically transmit
+    delay(100);
     startWiFiAndOTA("Quiz-Coordinator");
+  }
+
+  // Non-blocking timer: Check if 1.5 seconds (1500 ms) have passed since the round finished
+  if (pendingSummary && (millis() - roundFinishTime >= 1500)) {
+    pendingSummary = false;
+    
+    QuizSummaryMessage summary;
+    summary.senderType = 0; // Coordinator
+    summary.senderId = 0;
+    summary.command = CMD_ROUND_SUMMARY;
+    summary.winnerId = lastWinner;
+
+    // Copy arrays into payload
+    for(int i=0; i<4; i++) {
+      summary.responseTimes[i] = contestantTimes[i];
+      summary.penalties[i] = contestantsWithPenalty[i];
+    }
+    
+    esp_now_send(macBridge, (uint8_t *) &summary, sizeof(summary));
+    Serial.println("SYSTEM: Round summary sent to Bridge.");
   }
 
   checkBootButtonForOTA("Quiz-Coordinator");
