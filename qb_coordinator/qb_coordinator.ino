@@ -1,5 +1,7 @@
 #include <..\QuizCommon\QuizCommon.h>
 
+bool pendingOTA = false; // Flag to safely trigger Wi-Fi in the main loop
+
 void clearCentralLeds() {
   digitalWrite(PIN_COORDINATOR_RED, LOW);
   digitalWrite(PIN_COORDINATOR_YEL, LOW);
@@ -79,8 +81,8 @@ void OnDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int 
       QuizMessage outMsg = {0, 0, CMD_ENABLE_OTA};
       esp_now_send(macBroadcast, (uint8_t *) &outMsg, sizeof(outMsg));
       
-      // Start local OTA
-      startWiFiAndOTA("Quiz-Coordinator");
+      // Defer local Wi-Fi startup to the main loop to prevent crashing the Wi-Fi task
+      pendingOTA = true;
     }
   } 
   // --- From Contestant ---
@@ -123,6 +125,13 @@ void setup() {
 }
 
 void loop() {
+  // Process deferred OTA startup safely outside the ESP-NOW callback
+  if (pendingOTA) {
+    pendingOTA = false;
+    delay(100); // Give the ESP-NOW broadcast a tiny bit of time to physically transmit
+    startWiFiAndOTA("Quiz-Coordinator");
+  }
+
   checkBootButtonForOTA("Quiz-Coordinator");
   handleOTA();
   delay(50);

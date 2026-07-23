@@ -12,6 +12,7 @@ uint32_t penaltyStartTime = 0;
 uint32_t lastEarlyPressTime = 0;
 bool blinkState = false;
 String hostNameStr;
+bool pendingOTA = false; // Flag to safely trigger Wi-Fi in the main loop
 
 // Callback for incoming commands from Coordinator
 void OnDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int len) {
@@ -39,7 +40,8 @@ void OnDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int 
       digitalWrite(PIN_BUTTON_LED, LOW);
     }
     else if (msg.command == CMD_ENABLE_OTA) {
-      startWiFiAndOTA(hostNameStr.c_str());
+      // Defer local Wi-Fi startup to the main loop
+      pendingOTA = true;
     }
   }
 }
@@ -96,6 +98,12 @@ void loop() {
   static bool lastReading = HIGH;
   static bool buttonState = HIGH;
   static uint32_t lastDebounceTime = 0;
+
+  // Process deferred OTA startup safely outside the ESP-NOW callback
+  if (pendingOTA) {
+    pendingOTA = false;
+    startWiFiAndOTA(hostNameStr.c_str());
+  }
   
   checkBootButtonForOTA(hostNameStr.c_str());
   

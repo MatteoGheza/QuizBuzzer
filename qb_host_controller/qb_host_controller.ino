@@ -79,10 +79,13 @@ void loop() {
       QuizMessage outMsg = {1, 0, CMD_ENABLE_OTA};
       esp_now_send(macCoordinator, (uint8_t *) &outMsg, sizeof(outMsg));
       
-      startWiFiAndOTA("Quiz-Host-Controller");
+      for(int i=0; i<3; i++) { 
+        digitalWrite(PIN_BUTTON_LED, LOW); delay(150); 
+        digitalWrite(PIN_BUTTON_LED, HIGH); delay(150); 
+      }
       
-      // Flash LED to acknowledge command sent
-      for(int i=0; i<3; i++) { digitalWrite(PIN_BUTTON_LED, LOW); delay(150); digitalWrite(PIN_BUTTON_LED, HIGH); delay(150); }
+      // Now it is safe to reset the radio and connect to Wi-Fi
+      startWiFiAndOTA("Quiz-Host-Controller");
       
       // Wait for user to release the button
       while(digitalRead(PIN_BUTTON) == LOW) delay(10);
