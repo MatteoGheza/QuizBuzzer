@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pannello di Controllo Quiz</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1e1e1e;
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #2c3e50;
+            padding: 15px 30px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        button {
+            padding: 12px 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        .status-container {
+            font-size: 18px;
+        }
+
+        .status {
+            font-weight: bold;
+            color: #e74c3c;
+            text-transform: uppercase;
+        }
+
+        .status.connected {
+            color: #2ecc71;
+        }
+
+        /* Griglia principale per i 4 concorrenti */
+        .grid-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 20px;
+            flex-grow: 1;
+        }
+
+        /* Stile base del riquadro */
+        .box {
+            border-radius: 15px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            box-shadow: 0 8px 15px rgba(0, 0, 0, 0.3);
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.3s ease;
+        }
+
+        /* Colori dei pulsanti */
+        .box-1 {
+            background-color: #c0392b;
+            color: white;
+        }
+
+        /* Rosso */
+        .box-2 {
+            background-color: #f1c40f;
+            color: #2c3e50;
+        }
+
+        /* Giallo */
+        .box-3 {
+            background-color: #27ae60;
+            color: white;
+        }
+
+        /* Verde */
+        .box-4 {
+            background-color: #2980b9;
+            color: white;
+        }
+
+        /* Blu */
+
+        .box h2 {
+            margin: 0 0 10px 0;
+            font-size: 2rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0.9;
+        }
+
+        /* Stile cronometro olimpico */
+        .time-display {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 5rem;
+            font-weight: 900;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 10px 30px;
+            border-radius: 10px;
+            margin: 15px 0;
+            min-width: 350px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .status-msg {
+            font-size: 2rem;
+            font-weight: bold;
+            min-height: 40px;
+            text-transform: uppercase;
+        }
+
+        /* Stile per il Vincitore */
+        .winner {
+            border: 8px solid #FFD700;
+            animation: pulse-glow 1.5s infinite alternate;
+            transform: scale(1.02);
+            z-index: 10;
+            box-shadow: 0 0 30px #FFD700;
+        }
+
+        .winner .time-display {
+            background: #FFD700;
+            color: #111;
+            text-shadow: none;
+        }
+
+        @keyframes pulse-glow {
+            from {
+                box-shadow: 0 0 20px #FFD700;
+            }
+
+            to {
+                box-shadow: 0 0 50px #FFD700, 0 0 20px inset #FFD700;
+            }
+        }
+
+        /* Stile per gli squalificati */
+        .penalized {
+            opacity: 0.7;
+            background-color: #333 !important;
+            /* Grigiastro per chi è squalificato */
+            color: #aaa !important;
+        }
+
+        .penalized .time-display {
+            text-decoration: line-through;
+            color: #e74c3c;
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        .penalized .status-msg {
+            color: #e74c3c;
+            font-size: 2.5rem;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        <h1>QuizBuzzer</h1>
+        <div class="status-container">
+            Stato: <span id="status" class="status">Disconnesso</span>
+        </div>
+        <button id="connectBtn">Connetti Dispositivo</button>
+    </div>
+
+    <div class="grid-container">
+        <!-- Concorrente 1 (Rosso) -->
+        <div id="p1" class="box box-1">
+            <h2>Rosso</h2>
+            <div class="time-display">--,--- ms</div>
+            <div class="status-msg"></div>
+        </div>
+        <!-- Concorrente 2 (Giallo) -->
+        <div id="p2" class="box box-2">
+            <h2>Giallo</h2>
+            <div class="time-display">--,--- ms</div>
+            <div class="status-msg"></div>
+        </div>
+        <!-- Concorrente 3 (Verde) -->
+        <div id="p3" class="box box-3">
+            <h2>Verde</h2>
+            <div class="time-display">--,--- ms</div>
+            <div class="status-msg"></div>
+        </div>
+        <!-- Concorrente 4 (Blu) -->
+        <div id="p4" class="box box-4">
+            <h2>Blu</h2>
+            <div class="time-display">--,--- ms</div>
+            <div class="status-msg"></div>
+        </div>
+    </div>
+
+    <script>
+        let port;
+        let reader;
+        let serialBuffer = "";
+
+        const connectBtn = document.getElementById('connectBtn');
+        const statusText = document.getElementById('status');
+
+        if (!("serial" in navigator)) {
+            alert("API Web Serial non supportata in questo browser. Usa Chrome o Edge.");
+            connectBtn.disabled = true;
+        }
+
+        connectBtn.addEventListener('click', async () => {
+            try {
+                port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 115200 });
+
+                statusText.innerText = 'Connesso';
+                statusText.classList.add('connected');
+                connectBtn.style.display = 'none';
+
+                const textDecoder = new TextDecoderStream();
+                port.readable.pipeTo(textDecoder.writable);
+                reader = textDecoder.readable.getReader();
+
+                readLoop();
+            } catch (error) {
+                console.error('Errore di connessione:', error);
+                statusText.innerText = 'Errore di connessione';
+            }
+        });
+
+        async function readLoop() {
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) {
+                    reader.releaseLock();
+                    break;
+                }
+
+                serialBuffer += value;
+                let lines = serialBuffer.split('\n');
+                serialBuffer = lines.pop();
+
+                for (let line of lines) {
+                    line = line.trim();
+                    if (!line) continue;
+
+                    if (line.startsWith('#')) {
+                        handleEvent(line.substring(1));
+                    } else {
+                        console.log("LOG DISPOSITIVO:", line);
+                    }
+                }
+            }
+        }
+
+        function handleEvent(jsonData) {
+            try {
+                const payload = JSON.parse(jsonData);
+
+                if (payload.type === 'ready') {
+                    console.log("Bridge inizializzato e pronto!");
+                }
+                else if (payload.type === 'mode') {
+                    // Quando la modalità passa a "arm", resetto tutto l'UI
+                    if (payload.value === 'arm') {
+                        resetUI();
+                    }
+                }
+                else if (payload.type === 'summary') {
+                    renderSummary(payload);
+                }
+            } catch (e) {
+                console.error("Errore nel parsing del JSON:", e, jsonData);
+            }
+        }
+
+        function resetUI() {
+            for (let i = 1; i <= 4; i++) {
+                const box = document.getElementById(`p${i}`);
+                const timeEl = box.querySelector('.time-display');
+                const statusEl = box.querySelector('.status-msg');
+
+                // Rimuove gli stili speciali
+                box.classList.remove('winner', 'penalized');
+
+                // Resetta testi
+                timeEl.innerHTML = '--,--- ms';
+                statusEl.innerHTML = '';
+            }
+        }
+
+        function renderSummary(data) {
+            data.results.forEach(res => {
+                const box = document.getElementById(`p${res.id}`);
+                const timeEl = box.querySelector('.time-display');
+                const statusEl = box.querySelector('.status-msg');
+
+                // Imposta il tempo formattato
+                let timeStr = res.time > 0 ?
+                    new Intl.NumberFormat("it-IT", { style: "unit", unit: "millisecond" }).format(
+                        res.time,
+                    ) :
+                    "0,000 ms";
+
+                // Gestione Penalità / Squalifica
+                if (res.penalty) {
+                    box.classList.add('penalized');
+                    timeEl.innerHTML = timeStr; // Lo strikethrough è gestito dal CSS .penalized
+                    statusEl.innerHTML = '🚫 SQUALIFICATO';
+                }
+                // Gestione Risultati Normali
+                else {
+                    timeEl.innerHTML = timeStr;
+                    statusEl.innerHTML = '';
+                }
+
+                // Evidenzia il vincitore (solo se non è squalificato)
+                if (res.id === data.winnerId && !res.penalty) {
+                    box.classList.add('winner');
+                    statusEl.innerHTML = '👑 VINCITORE';
+                }
+            });
+        }
+    </script>
+</body>
+
+</html>
