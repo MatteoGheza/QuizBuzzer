@@ -104,12 +104,46 @@ def upload_sketch(sketch, ip):
     result = subprocess.call(cmd, shell=True)
     return result == 0
 
+last_compiled = None
+def use_selected_device(choice, device_list):
+    global last_compiled
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(device_list):
+            hostname, ip = device_list[idx]
+            sketch = DEVICE_MAP[hostname]
+                    
+            clear_screen()
+            print(f"Target: {hostname} ({ip})")
+                    
+            # 1. Compile (or skip if already compiled)
+            if compile_sketch(sketch, last_compiled):
+                last_compiled = sketch  # Update state so we don't compile this again next time
+                        
+                # 2. Upload
+                if upload_sketch(sketch, ip):
+                    print("\n[SUCCESS] Flash complete!")
+                    return True
+                else:
+                    print("\n[ERROR] Upload failed.")
+                    return False
+            else:
+                print("\n[ERROR] Compilation failed. Aborting upload.")
+                last_compiled = None # Reset state on failure
+                return False
+        else:
+            print("Invalid selection. Try again.")
+            return False
+    except ValueError:
+        print("Invalid input. Please enter a number, 'r', or 'q'.")
+        return False
+
 def main():
     clear_screen()
     print("=== QuizBuzzer OTA Flasher ===")
     
     devices = scan_devices()
-    last_compiled = None
+    device_list = []
     
     while True:
         print("\n" + "="*30)
@@ -125,6 +159,7 @@ def main():
                 print(f" [{i+1}] {hostname:<22} (IP: {ip:<15} | Sketch: {sketch_name})")
                 
         print("\n [r] Rescan network")
+        print(" [a] Select ALL online devices")
         print(" [q] Quit")
         
         choice = input("\nSelect an option: ").strip().lower()
@@ -132,39 +167,22 @@ def main():
         if choice == 'q':
             print("Exiting...")
             break
+        elif choice == 'a':
+            choice = f"1-{len(device_list)}"
         elif choice == 'r':
             clear_screen()
             devices = scan_devices()
             continue
-            
-        try:
-            idx = int(choice) - 1
-            if 0 <= idx < len(device_list):
-                hostname, ip = device_list[idx]
-                sketch = DEVICE_MAP[hostname]
-                
-                clear_screen()
-                print(f"Target: {hostname} ({ip})")
-                
-                # 1. Compile (or skip if already compiled)
-                if compile_sketch(sketch, last_compiled):
-                    last_compiled = sketch  # Update state so we don't compile this again next time
-                    
-                    # 2. Upload
-                    if upload_sketch(sketch, ip):
-                        print("\n[SUCCESS] Flash complete!")
-                    else:
-                        print("\n[ERROR] Upload failed.")
-                else:
-                    print("\n[ERROR] Compilation failed. Aborting upload.")
-                    last_compiled = None # Reset state on failure
-                
-                input("\nPress Enter to return to the menu...")
-                clear_screen()
-            else:
-                print("Invalid selection. Try again.")
-        except ValueError:
-            print("Invalid input. Please enter a number, 'r', or 'q'.")
+
+        if "-" in choice and len(choice) == 3:
+            for i in range(int(choice[0]), int(choice[2])+1):
+                ok = use_selected_device(i, device_list)
+                if not ok:
+                    break
+        else:
+            use_selected_device(choice, device_list)
+        input("\nPress Enter to return to the menu...")
+        clear_screen()
 
 if __name__ == "__main__":
     main()
