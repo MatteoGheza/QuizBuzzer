@@ -2,6 +2,10 @@
 
 bool pendingOTA = false; // Flag to safely trigger Wi-Fi in the main loop
 
+unsigned long gameStartTime = 0;
+
+bool contestantsWithPenalty[4] = {false, false, false, false};
+
 void clearCentralLeds() {
   digitalWrite(PIN_COORDINATOR_RED, LOW);
   digitalWrite(PIN_COORDINATOR_YEL, LOW);
@@ -10,21 +14,31 @@ void clearCentralLeds() {
 }
 
 void handleContestantPress(uint8_t contestantId, uint8_t pin) {
-  if (currentState == GAME_ARMED) {
-    currentState = GAME_WON; 
-    
-    digitalWrite(pin, HIGH);
-    #if USE_BUZZER
-    tone(PIN_COORDINATOR_BUZZER, 2000, 400); 
-    #endif
+  if (contestantsWithPenalty[contestantId-1]) {
+    Serial.printf("GAME: Ignoring contestant %d (penalty).\n", contestantId);
+  } else {
+    if (currentState != IDLE) {
+      unsigned long endTime = micros();
+      float durationMs = (endTime - gameStartTime) / 1000.0f;
+      Serial.printf("GAME: Contestant %d responded in %.4f ms.\n", contestantId, durationMs);
+    }
+    if (currentState == GAME_ARMED) {
+      currentState = GAME_WON; 
+      
+      digitalWrite(pin, HIGH);
+      #if USE_BUZZER
+      tone(PIN_COORDINATOR_BUZZER, 2000, 400); 
+      #endif
 
-    // Broadcast IDLE command to instantly turn off all contestant LEDs
-    QuizMessage outMsg = {0, 0, CMD_IDLE};
-    esp_now_send(macBroadcast, (uint8_t *) &outMsg, sizeof(outMsg));
+      // Broadcast IDLE command to instantly turn off all contestant LEDs
+      QuizMessage outMsg = {0, 0, CMD_IDLE};
+      esp_now_send(macBroadcast, (uint8_t *) &outMsg, sizeof(outMsg));
 
-    Serial.printf("GAME: Winner is Contestant %d!\n", contestantId);
+      Serial.printf("GAME: Winner is Contestant %d!\n", contestantId);
 
-  } else if (currentState == TEST_MODE) {
+    }
+  }
+  if (currentState == TEST_MODE) {
     digitalWrite(pin, HIGH);
     
     #if USE_BUZZER
@@ -53,6 +67,7 @@ void OnDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int 
 
       QuizMessage outMsg = {0, 0, CMD_ARM};
       esp_now_send(macBroadcast, (uint8_t *) &outMsg, sizeof(outMsg));
+      gameStartTime = micros();
       Serial.println("MODE: Game Armed - Waiting for buzzers...");
     } 
     else if (msg.command == CMD_IDLE) {
@@ -62,6 +77,11 @@ void OnDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int 
       QuizMessage outMsg = {0, 0, CMD_IDLE};
       esp_now_send(macBroadcast, (uint8_t *) &outMsg, sizeof(outMsg));
       Serial.println("MODE: Reset to IDLE");
+
+      contestantsWithPenalty[0] = false;
+      contestantsWithPenalty[1] = false;
+      contestantsWithPenalty[2] = false;
+      contestantsWithPenalty[3] = false;
     } 
     else if (msg.command == CMD_TEST_ENTER) {
       currentState = TEST_MODE;
@@ -96,6 +116,10 @@ void OnDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int 
     if (pin != 0) {
       handleContestantPress(msg.senderId, pin);
     }
+  }
+  else if (msg.senderType == 2 && msg.command == CMD_PENALTY) {
+    contestantsWithPenalty[msg.senderId-1] = true;
+    Serial.printf("GAME: Contestant %d received penalty.\n", msg.senderId);
   }
 }
 

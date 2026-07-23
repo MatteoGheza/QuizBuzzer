@@ -22,12 +22,14 @@ void OnDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int 
   if (msg.senderType == 0) { // Message from Coordinator
     if (msg.command == CMD_ARM) {
       isRoundActive = true;
-      if (millis() - lastEarlyPressTime > 3000) earlyPressCount = 0;
+      if (millis() - lastEarlyPressTime > EARLY_PRESS_WINDOW) earlyPressCount = 0;
       
-      if (earlyPressCount >= 2) {
+      if (earlyPressCount >= MAX_EARLY_PRESSES) {
         isPenalized = true;
         penaltyStartTime = millis();
         Serial.println("Contestant penalized for early spamming!");
+        QuizMessage outMsg = {2, contestantId, CMD_PENALTY};
+        esp_now_send(macCoordinator, (uint8_t *) &outMsg, sizeof(outMsg));
       } else {
         isPenalized = false;
         digitalWrite(PIN_BUTTON_LED, HIGH);
@@ -134,7 +136,7 @@ void loop() {
 
   // Non-Blocking Penalty Blink
   if (isPenalized && isRoundActive) {
-    if (millis() - penaltyStartTime < 10000) {
+    if (millis() - penaltyStartTime < PENALTY_DURATION) {
       if (millis() - lastBlinkTime > 100) { 
         lastBlinkTime = millis();
         blinkState = !blinkState;
