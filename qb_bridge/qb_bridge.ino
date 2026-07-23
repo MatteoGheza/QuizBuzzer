@@ -86,6 +86,16 @@ void loop() {
     startWiFiAndOTA("Quiz-Bridge");
   }
 
+  if (Serial.available() > 0) {
+    String input = Serial.readStringUntil('\n');
+    
+    if (input.indexOf("\"click\"") >= 0) {
+      QuizMessage outMsg = {3, 0, CMD_SIMULATE_CLICK}; 
+      esp_now_send(macHost, (uint8_t *)&outMsg, sizeof(outMsg));
+      Serial.println("Bridge: simulated button click sent to Host.");
+    }
+  }
+
   checkBootButtonForOTA("Quiz-Bridge");
   handleOTA();
   delay(50);

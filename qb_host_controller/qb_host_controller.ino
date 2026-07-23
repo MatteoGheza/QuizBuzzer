@@ -1,5 +1,29 @@
 #include <..\QuizCommon\QuizCommon.h>
 
+void OnDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int len) {
+  QuizMessage msg;
+  if (len >= sizeof(QuizMessage)) {
+    memcpy(&msg, incomingData, sizeof(msg));
+    
+    if (msg.command == CMD_SIMULATE_CLICK) {
+      if (hostState == HOST_IDLE) {
+          hostState = HOST_GAME;
+          digitalWrite(PIN_BUTTON_LED, LOW); 
+          QuizMessage outMsg = {1, 0, CMD_ARM};
+          esp_now_send(macCoordinator, (uint8_t *) &outMsg, sizeof(outMsg));
+          Serial.println("Host: Entering Game Mode (Remote Sim)");
+      } 
+      else if (hostState == HOST_GAME || hostState == HOST_TEST) {
+          hostState = HOST_IDLE;
+          digitalWrite(PIN_BUTTON_LED, HIGH); 
+          QuizMessage outMsg = {1, 0, CMD_IDLE};
+          esp_now_send(macCoordinator, (uint8_t *) &outMsg, sizeof(outMsg));
+          Serial.println("Host: Returning to IDLE (Remote Sim)");
+      }
+    }
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   setRGBLedColor(COLOR_BOOTING);
@@ -15,6 +39,7 @@ void setup() {
     while(1);
   }
 
+  esp_now_register_recv_cb(OnDataRecv);
   registerPeer(macCoordinator);
   
   digitalWrite(PIN_BUTTON_LED, HIGH);

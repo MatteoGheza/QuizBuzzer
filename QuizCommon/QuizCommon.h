@@ -32,7 +32,7 @@ inline void setRGBLedColor(RGB color) {
 const uint8_t macBroadcast[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 // --- ESP-NOW Protocol Structures ---
-enum QuizCommand { CMD_IDLE, CMD_ARM, CMD_BUZZ, CMD_PENALTY, CMD_TEST_ENTER, CMD_ENABLE_OTA, CMD_ROUND_SUMMARY };
+enum QuizCommand { CMD_IDLE, CMD_ARM, CMD_BUZZ, CMD_PENALTY, CMD_TEST_ENTER, CMD_ENABLE_OTA, CMD_ROUND_SUMMARY, CMD_SIMULATE_CLICK };
 
 typedef struct QuizMessage {
   uint8_t senderType; // 0 = Coordinator, 1 = Host, 2 = Contestant

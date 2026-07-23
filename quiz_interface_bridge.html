@@ -284,6 +284,27 @@
             }
         }
 
+        // --- GESTIONE DELLA BARRA SPAZIATRICE ---
+        document.addEventListener('keydown', async (event) => {
+            if (event.code === 'Space') {
+                event.preventDefault(); // Evita lo scroll della pagina
+
+                if (port && port.writable) {
+                    try {
+                        const writer = port.writable.getWriter();
+                        const data = new TextEncoder().encode('{"action":"click"}\n');
+                        await writer.write(data);
+                        writer.releaseLock();
+                        console.log("Comando click inviato al bridge!");
+                    } catch (err) {
+                        console.error("Errore nell'invio del comando seriale:", err);
+                    }
+                } else {
+                    console.warn("Porta seriale non connessa. Impossibile inviare il comando.");
+                }
+            }
+        });
+
         function handleEvent(jsonData) {
             try {
                 const payload = JSON.parse(jsonData);
