@@ -12,7 +12,8 @@ DEVICE_MAP = {
     "Quiz-Button-3": "qb_button",
     "Quiz-Button-4": "qb_button",
     "Quiz-Coordinator": "qb_coordinator",
-    "Quiz-Host-Controller": "qb_host_controller"
+    "Quiz-Host-Controller": "qb_host_controller",
+    "Quiz-Bridge": "qb_bridge"
 }
 
 def clear_screen():
@@ -168,7 +169,10 @@ def main():
             print("Exiting...")
             break
         elif choice == 'a':
-            choice = f"1-{len(device_list)}"
+            if len(device_list) > 1:
+                choice = f"1-{len(device_list)}"
+            else:
+                choice = "1"
         elif choice == 'r':
             clear_screen()
             devices = scan_devices()
